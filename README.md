@@ -74,8 +74,6 @@ Year
 13                4420.50         53046.0   912609.0  1946529.526563  1946529.526563
 14                4420.50         53046.0   965655.0  2183253.209394  2183253.209394
 15                4420.50         53046.0  1018701.0  2441376.227869  2441376.227869
-Total savings is cash savings = 1018701.0. And 100000 total RSUs (have to pay capital gain/loss when sell)
-Also likely doesn't come with parking spot (i.e. $200/mo extra)
 ```
 
 

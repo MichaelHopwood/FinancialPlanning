@@ -337,7 +337,7 @@ def estimate(kwargs):
     savings_df['Savings w/I'] = savingswithinterest
     savings_df['NetWorth'] = savings_df['Savings w/I']
     print(savings_df)
-    print(f"Total savings is cash savings = {round(savings_df.iloc[-1]['Savings'],2)}. And {total_rsus} total RSUs (have to pay capital gain/loss when sell)")
+    print(f"Total savings is cash savings = {round(float(savings_df.iloc[-1]['Savings w/I']),2)}. And {total_rsus} total RSUs (have to pay capital gain/loss when sell)")
     print("Also likely doesn't come with parking spot (i.e. $200/mo extra) ")
 
     savings_df_renting = savings_df.copy()

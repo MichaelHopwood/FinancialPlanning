@@ -5,8 +5,8 @@ print_amoritization: True
 ### Salary settings
 ##############################
 base_salary : 150_000
-signon_bonus : 250_000
-total_rsus : 100_000               # uses 25% investing schedule per year over 4 years
+signon_bonus : 100_000
+total_rsus : 250_000               # uses 25% investing schedule per year over 4 years
 
 
 
