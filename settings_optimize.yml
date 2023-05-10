@@ -1,0 +1,19 @@
+base_settings : settings.yml
+
+# Grid search parameters for optimization
+
+# 2 options:
+# 1. specify dict with keys: {min, max, num}
+# 2. specify list of values
+
+onetime_extra_payment:
+  0:
+    min: 0
+    max: 100_000
+    num: 2
+  12:
+    min: 0
+    max: 100_000
+    num: 2
+
+loan_duration: [10, 15, 20, 30]

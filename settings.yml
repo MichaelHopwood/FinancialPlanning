@@ -1,0 +1,89 @@
+num_years_investigate: 15
+print_amoritization: True
+
+##############################
+### Salary settings
+##############################
+base_salary : 150_000
+signon_bonus : 250_000
+total_rsus : 100_000               # uses 25% investing schedule per year over 4 years
+
+
+
+
+##############################
+### Housing settings
+##############################
+
+###############
+### Option 1: Renting
+###############
+rent_monthly: 2500                # rent cost per month
+rental_insurance_monthly: 17      # rental insurance per month
+
+###############
+## Option 2: Mortgage
+###############
+house_cost: 400_000                # property value bought at
+amount_down: 80_000                # amount down for loan
+loan_duration: 15                 # loan duration in years
+loan_interest_rate:               # interest rate for loan for each loan duration
+  # year : interest rate
+  10: 6.5                         # Current interest rate breakdown according to bank I am intersted in
+  15: 5.875
+  20: 6.375
+  30: 6.750
+## monthly fees
+property_tax_monthly: 220         # property tax per month
+hoa_fee_monthly: 344              # HOA fee per month
+home_insurance_monthly: 87        # home insurance per month
+## sales costs
+agent_sales_cost: 6.0             # agent sales cost in percentage
+docs_stamp_cost:  0.7             # docs stamp cost in percentage
+title_ins_cost:   0.7             # title insurance cost in percentage
+# extra payments
+onetime_extra_payment:
+  # month : amount paid on that month
+  0: 0
+  12: 0
+monthly_extra_payment:
+  # month : amount paid every month starting on that month until next setting
+  0: 0
+
+## utilities costs
+utilities_monthly: 300            # e.g. water, electricity, gas, internet, etc.
+
+
+##############################
+### Food & Entertainment settings
+##############################
+medicare_tax_annual: 5000         # 
+
+
+
+##############################
+### Food & Entertainment settings
+##############################
+foodandentertainment_monthly: 1000  # adapt this to your lifestyle
+                                    # groceries, eating out, entertainment, etc.
+
+
+
+
+##############################
+### Retirement settings
+##############################
+k401:  11_250                     # 401k contribution per year (include only cost out of your 
+                                  #                             pocket after company matching)
+roth: 5500                        # roth contribution per year
+
+
+
+
+##############################
+### Banking settings
+##############################
+interest_rate: 0.04               # interest rate for savings account
+                                  #   - 0.01 for most banks
+                                  #   - 0.02 for some online banks
+
