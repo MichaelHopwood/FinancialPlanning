@@ -15,6 +15,8 @@ python mortgage.py --cfg settings.yml
 
 The current code assumes you sell at same price that you bought it, considering the most probable "worst" case. Certainly, this is unlikely.
 
+The key columns to look at here are `net_worth_mortgage` and `net_worth_rent`. The other columns break down the components of net worth. The `net_worth_mortgage` column adds all values except `savings_rent`. If you have substantial savings or investments that you want to be counted in the net worth computation, then specify the parameters in `settings.yml` placed under the "Current net-worth settings" title.
+
 ```cmd
 Annual results:
       savings_mortgage  house_worth_postsale  savings_rent  investments      roth      401k  net_worth_mortgage  net_worth_rent
