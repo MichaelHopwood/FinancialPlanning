@@ -1,5 +1,18 @@
-num_years_investigate: 15
-print_amoritization: True
+num_years_investigate: 20
+start_month_investigate: 7         # If want to start investigation not in January
+verbose: 1
+
+
+##############################
+### Current net-worth settings
+##############################
+# These are tracked to help compute your net worth
+current_savings: 0           # current savings in bank account
+current_investments: 0            # current investments in brokerage account
+current_k401: 0                   # current 401k balance
+current_roth: 0                   # current roth balance
+
+
 
 ##############################
 ### Salary settings
@@ -7,7 +20,6 @@ print_amoritization: True
 base_salary : 150_000
 signon_bonus : 100_000
 total_rsus : 250_000               # uses 25% investing schedule per year over 4 years
-
 
 
 
@@ -25,7 +37,11 @@ rental_insurance_monthly: 17      # rental insurance per month
 ## Option 2: Mortgage
 ###############
 house_cost: 400_000                # property value bought at
-amount_down: 80_000                # amount down for loan
+## assumed house sale cost (for simulation purposes) for when
+## or if you sell the property
+assumed_house_sale_cost: 400_000
+
+amount_down: 20_000                # amount down for loan
 loan_duration: 15                 # loan duration in years
 loan_interest_rate:               # interest rate for loan for each loan duration
   # year : interest rate
@@ -34,6 +50,7 @@ loan_interest_rate:               # interest rate for loan for each loan duratio
   20: 6.375
   30: 6.750
 ## monthly fees
+pmi_monthly: 180.
 property_tax_monthly: 220         # property tax per month
 hoa_fee_monthly: 344              # HOA fee per month
 home_insurance_monthly: 87        # home insurance per month
@@ -52,7 +69,6 @@ monthly_extra_payment:
 
 ## utilities costs
 utilities_monthly: 300            # e.g. water, electricity, gas, internet, etc.
-
 
 ##############################
 ### Food & Entertainment settings
@@ -73,9 +89,10 @@ foodandentertainment_monthly: 1000  # adapt this to your lifestyle
 ##############################
 ### Retirement settings
 ##############################
-k401:  11_250                     # 401k contribution per year (include only cost out of your 
-                                  #                             pocket after company matching)
-roth: 5500                        # roth contribution per year
+k401:  22_500                           # intended 401k contribution per year
+k401_company_coverage: 11_250                # company match for 401k
+
+roth: 5500                              # intended roth contribution per year
 
 
 
@@ -83,7 +100,5 @@ roth: 5500                        # roth contribution per year
 ##############################
 ### Banking settings
 ##############################
-interest_rate: 0.04               # interest rate for savings account
-                                  #   - 0.01 for most banks
-                                  #   - 0.02 for some online banks
+savings_interest_rate: 0.04       # interest rate for savings account
 

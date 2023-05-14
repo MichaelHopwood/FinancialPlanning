@@ -6,7 +6,7 @@ import pandas as pd
 import copy
 import os
 import sys
-from eval import estimate
+from eval import estimate, YoureBrokeException
 
 argparse.ArgumentParser(description='Mortgage calculator')
 parser = argparse.ArgumentParser()
@@ -25,7 +25,6 @@ if 'base_settings' in settings:
     print(settings)
     param_grid = {}
     for k,v in settings.items():
-        print(k)
         if isinstance(base_settings[k], dict):
             # then we expect value `v` to be a dictionary also, where its values are grid search parameters (either dict or list)
             if sum(['min' in v , 'max' in v, 'num' in v]) > 0: 
@@ -49,7 +48,6 @@ if 'base_settings' in settings:
                 param_grid[k] = v
 
     param_keys = list(param_grid.keys())
-    print(param_keys)
 
     param_grid = list(itertools.product(*list(param_grid.values())))
 
@@ -83,8 +81,9 @@ if 'base_settings' in settings:
 
     @blockPrinting
     def execute(**kwargs):
-        return estimate(kwargs)
-
+        summary_dict, results_df = estimate(kwargs)
+        return summary_dict
+    
     results = []
     for kwargs in grid_kwargs:
         iter_settings = copy.deepcopy(base_settings)
@@ -93,14 +92,17 @@ if 'base_settings' in settings:
         results.append(
             execute(**iter_settings)
         )
-    results_df = pd.DataFrame(results, columns=['net_worth', 'net_worth_rent', 'SumViolatedMonthlyLowEarnings', 'SumViolatedMonthlyLowEarnings_rent'])
+    results_df = pd.DataFrame(results)
 
-    print( pd.concat([param_df, results_df], axis=1) )
+    print( pd.concat([param_df, results_df], axis=1)
+                .sort_values(by='net_worth_mortgage', ascending=False) 
+        )
+    print("Note: `NaN` values indicate that your cash savings balance "
+          "had < $0 at some point in time.")
 
 else:
-    estimate(settings)
+    summary_dict, results_df = estimate(settings)
 
-
-
-
+    print("\nMonthly results:")
+    print(results_df)
 

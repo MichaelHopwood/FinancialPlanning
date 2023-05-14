@@ -1,6 +1,9 @@
-import decimal
-import numpy as np
 import pandas as pd
+import numpy as np
+import datetime
+import copy
+import decimal
+import warnings
 
 DOLLAR_QUANTIZE = decimal.Decimal('.01')
 
@@ -11,6 +14,7 @@ def dollar(f, round=decimal.ROUND_CEILING):
     if not isinstance(f, decimal.Decimal):
         f = decimal.Decimal(str(f))
     return f.quantize(DOLLAR_QUANTIZE, rounding=round)
+
 
 class Mortgage:
     def __init__(self, interest, months, amount):
@@ -79,18 +83,6 @@ class Mortgage:
             balance = balance - principle - extra_principle
 
 
-def print_summary(m, extra_principle_payments=[]):
-    print('{0:>25s}:  {1:>12.6f}'.format('Rate', m.rate()))
-    print('{0:>25s}:  {1:>12.6f}'.format('Month Growth', m.month_growth()))
-    print('{0:>25s}:  {1:>12.6f}'.format('APY', m.apy()))
-    print('{0:>25s}:  {1:>12.0f}'.format('Payoff Years', m.loan_years()))
-    print('{0:>25s}:  {1:>12.0f}'.format('Payoff Months', m.loan_months()))
-    print('{0:>25s}:  {1:>12.2f}'.format('Amount', m.amount()))
-    print('{0:>25s}:  {1:>12.2f}'.format('Monthly Payment', m.monthly_payment()))
-    print('{0:>25s}:  {1:>12.2f}'.format('Annual Payment', m.annual_payment()))
-    print('{0:>25s}:  {1:>12.2f}'.format('Total Payout', m.total_payout(extra_principle_payments)))
-
-
 def get_extra_principle_payments(num_months, extra_monthly_pay, lump_dumps, return_lump_separately=False):
     extra_principle_payments = [0] * int(num_months)
     extra_principle_payments = np.array(extra_principle_payments)
@@ -111,244 +103,314 @@ def get_extra_principle_payments(num_months, extra_monthly_pay, lump_dumps, retu
         return extra_principle_payments
 
 
-def estimate(kwargs):
-    kwargs['monthly_extra_payment'] = [(k, v) for k, v in kwargs['monthly_extra_payment'].items()]
-    kwargs['onetime_extra_payment'] = [(k, v) for k, v in kwargs['onetime_extra_payment'].items()]
 
-    interest = kwargs['loan_interest_rate'][kwargs['loan_duration']]
-    num_months = float(kwargs['loan_duration']) * 12
-
-    extra_principle_payments, lump_payments = get_extra_principle_payments(
-            num_months=num_months,
-            extra_monthly_pay=kwargs['monthly_extra_payment'],
-            lump_dumps=kwargs['onetime_extra_payment'],
-            return_lump_separately=True
-        )
-    
-    m = Mortgage(float(interest) / 100 , num_months, kwargs['house_cost'])
-
-    monthly_loan_base_payment = m.monthly_payment()
-
-    amoritization_df = pd.DataFrame(list(m.monthly_payment_schedule(extra_principle_payments)), columns=['Principal', 'Interest', 'ExtraPrinciple'])
-    # correct so dont pay extra on last month
-    amoritization_df['ExtraPrinciple'].iloc[-1] = dollar(0.0)
-
-    if kwargs['print_amoritization']:
-        pd.set_option('display.max_rows', len(amoritization_df)+1)
-        print('\n\n')
-        print("AMORITIZATION:")
-        print(amoritization_df)
-
-    amoritization_df['TotalPrinciplePaid'] = amoritization_df['Principal'] + amoritization_df['ExtraPrinciple']
-    amount_paid_to_principal_for_yearsofinterest = {f"PrincipalPaid_Year{year}": amoritization_df.TotalPrinciplePaid.iloc[ : (year * 12)-1].sum() for year in range(1,kwargs['num_years_investigate']+1) }
-    amount_lost_to_interest_for_yearsofinterest = {f"InterestPaid_Year{year}": amoritization_df.Interest.iloc[ : (year * 12)-1].sum() for year in range(1,kwargs['num_years_investigate']+1) }
-    num_months_to_pay_full = len( amoritization_df )
-
-    money_lost_to_interest = amoritization_df.Interest.sum()
-
-    extra_principle_payments = np.array(extra_principle_payments)
-    extra_principle_payments[ num_months_to_pay_full : ] = 0
-    extra_principle_payments = list(extra_principle_payments)
+def annot(scenario='all'):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            return {
+                    "name": func.__name__,
+                    "scenario": scenario,
+                    "value": func(*args, **kwargs)
+                    }
+        return wrapper
+    return decorator
 
 
-    #########################################################################
-    house_cost = kwargs['house_cost']
+class YoureBrokeException(Exception): pass
 
-    def monthly_fees():
-        property_tax_per_month = kwargs['property_tax_monthly']
-        hoa_per_month = kwargs['hoa_fee_monthly']
-        insurance_per_month = kwargs['home_insurance_monthly']
-        return property_tax_per_month, hoa_per_month, insurance_per_month
 
-    def house_sale_fees(sales_price):
-        agent_sales_cost = - (kwargs['agent_sales_cost']/100.) * house_cost
-        docs_stamp_cost = - (kwargs['docs_stamp_cost']/100.) * sales_price
-        title_ins_cost = - (kwargs['title_ins_cost']/100.) * sales_price
-        total_cost_to_sell = agent_sales_cost + docs_stamp_cost + title_ins_cost
-        return agent_sales_cost, docs_stamp_cost, title_ins_cost, total_cost_to_sell
+class Estimator:
 
-    def estimate_income_tax(untaxed_income):
-        brackets = [
-            (0, 0), # null case
-            (11000, 0.1),
-            (44725, 0.12),
-            (95375, 0.22),
-            (182100, 0.24),
-            (231250, 0.32),
-            (578125, 0.35),
-            (np.inf, 0.37)
-        ]
-        income_tax = 0
-        for i, bracket in enumerate(brackets[1:]):
-            bracket_top_dollars, bracket_tax_rate = bracket
-            previous_bracket_top_dollars, _ = brackets[i]
-            if untaxed_income > previous_bracket_top_dollars:
-                income_tax += (min(bracket_top_dollars,untaxed_income)-previous_bracket_top_dollars) * bracket_tax_rate
-        return income_tax
+    def __init__(self, settings):
+        for k,v in settings.items():
+            setattr(self, k, v)
 
-    def retirement_payments():
-        k401 = float(kwargs['k401'])
-        roth = float(kwargs['roth'])
-        print(f"Retirement 401k roth not traditional ({k401}) and RothIRA ({roth})")
-        return k401 + roth
+        now = datetime.datetime.now()
+        now = now.replace(month=self.start_month_investigate)
+        end = copy.copy(now)
+        end = end.replace(year=now.year + self.num_years_investigate)
+        self.month_series = pd.date_range(now.strftime('%Y-%m'), 
+                                          end.strftime('%Y-%m'), 
+                                          freq='1M').strftime('%Y-%m')
+        self.month_series = pd.to_datetime(self.month_series)
 
-    def benefits_taxes():
-        # https://www.quora.com/How-much-tax-does-an-average-software-engineer-working-at-the-big-4-companies-in-the-SF-Bay-Area-pay
-        medicare_tax = kwargs['medicare_tax_annual']
-        print(f"Medicare tax ({medicare_tax})")
-        return medicare_tax
+    @annot(scenario='mortgage')
+    def mortgage_payments(self):
+        interest = self.loan_interest_rate[self.loan_duration]
+        num_months = float(self.loan_duration) * 12
 
-    # https://www.forbes.com/advisor/taxes/taxes-federal-income-tax-bracket/#:~:text=2023%20Tax%20Brackets%20(Taxes%20Due,the%20bracket%20you're%20in.
-    base_salary = kwargs['base_salary']
-    signon_bonus = kwargs['signon_bonus']
-    total_rsus = kwargs['total_rsus']
+        extra_principle_payments = get_extra_principle_payments(
+                num_months=num_months,
+                extra_monthly_pay=[(k, v) for k, v in self.monthly_extra_payment.items()],
+                lump_dumps=[(k, v) for k, v in self.onetime_extra_payment.items()],
+                return_lump_separately=False
+            )
+        
+        # lump_payments = pd.Series(data=lump_payments, index=self.month_series)
+        # extra_principle_payments = pd.Series(data=extra_principle_payments, index=self.month_series)
+        
+        m = Mortgage(float(interest) / 100 , num_months, self.house_cost - self.amount_down)
 
-    def estimate_everything(year, monthly_loan_base_payment):
-        print('\n\n')
-        print("###############################")
-        print(f"Tallying income year {year+1}")
-        print("###############################")
+        payments = list(m.monthly_payment_schedule(extra_principle_payments))
 
-        if year in [0,1]:
-            year_taxable_total = base_salary + signon_bonus/2 + total_rsus/4
-            year_cash_pretax = base_salary + signon_bonus/2
-        elif year in [2,3]:
-            year_taxable_total = base_salary + total_rsus/4
-            year_cash_pretax = base_salary
+        if len(payments) < len(self.month_series):
+            payments.extend([[0,0,0]]*(len(self.month_series)-len(payments)))
+            extra_principle_payments.extend([0]*(len(self.month_series)-len(payments)))
         else:
-            year_taxable_total = base_salary
-            year_cash_pretax = base_salary
-
-        print(f"Full taxable income = {year_taxable_total}")
-        # https://www.bankrate.com/taxes/how-bonuses-are-taxed/
-        print(f"\t(also have annual bonus of {base_salary*0.1} on average, which has a tax of {base_salary*0.1*0.22}, but not assured so not including)")
-
-        print(f"Cash made pretax = {year_cash_pretax}")
-
-        year_income_tax = estimate_income_tax(year_taxable_total)
-        print(f"Income tax calculated as {year_income_tax}")
+            payments = payments[:len(self.month_series)]
+            extra_principle_payments = extra_principle_payments[:len(self.month_series)]
         
-        # This is earnings including RSUs: income_first_year_after_tax = year_taxable_total - year_income_tax
-
-        year_cash_posttax = year_cash_pretax - year_income_tax - benefits_taxes() - retirement_payments()
-
-        print(f"Cash available (after tax & payments) = {year_cash_posttax}" )
-
-        month_st, month_ed = year*12, (year+1)*12
-        extra_payments_monthly = extra_principle_payments[month_st:month_ed]
-        monthly_loan_base_payment = float( monthly_loan_base_payment )
-        normal_house_payments_monthly = [m+monthly_loan_base_payment for m, month_number in zip( extra_payments_monthly , list(range(month_st, month_ed)) ) if month_number <= num_months_to_pay_full ]
-        normal_annual_house_payment = sum(normal_house_payments_monthly)
-        normal_equivalent_monthly_house_payment = normal_annual_house_payment / 12
-        print("Normal payments made per month = ", normal_house_payments_monthly, f" = {round(normal_annual_house_payment,2)} (or, {round(normal_equivalent_monthly_house_payment,2)} monthly)")
-        print("Versus monthly rent: ", kwargs['rent_monthly'])
-
-        lump_house_payments_monthly = lump_payments[month_st:month_ed]
-        lump_annual_house_payment = sum(lump_house_payments_monthly)
-        print("Lump payments made per month = ", lump_house_payments_monthly, f" = {round(lump_annual_house_payment,2)}")
+        amoritization_df = pd.DataFrame(payments, 
+                                        columns=['Principal', 'Interest', 'ExtraPrinciple'],
+                                        index=self.month_series).astype(float)
         
-        property_tax_per_month, hoa_per_month, insurance_per_month = monthly_fees()
-        taxes_hoa_insurance = (property_tax_per_month+hoa_per_month+insurance_per_month)
-        print(f"Monthly payments to property taxes ({property_tax_per_month}) + HOA ({hoa_per_month}) + insurance ({insurance_per_month}) = {taxes_hoa_insurance}")
-        annual_fees = taxes_hoa_insurance * 12
 
-        monthly_rent = kwargs['rent_monthly']
-        utility_costs_monthly = kwargs['utilities_monthly']
-        eat_and_fun_monthly = kwargs['foodandentertainment_monthly']
+        # correct so dont pay extra on last month
+        amoritization_df['ExtraPrinciple'].iloc[-1] = 0.
+        amoritization_df['TotalPrinciplePaid'] = amoritization_df['Principal'] + amoritization_df['ExtraPrinciple']
+        amoritization_df['TotalPrinciplePaid'].iloc[0] += self.amount_down
 
-        utility_total_costs = 12 * utility_costs_monthly
-        print(f"With utility costs of {utility_costs_monthly} monthly, equal to total of {utility_total_costs}")
+        amoritization_df['TotalPaid'] = amoritization_df['TotalPrinciplePaid'] + amoritization_df['Interest']
 
-        monthly_money_after_house_payments = round((year_cash_posttax - lump_annual_house_payment - annual_fees)/12 - normal_equivalent_monthly_house_payment - utility_costs_monthly - eat_and_fun_monthly, 2)
+        self.principal_paid = amoritization_df['TotalPrinciplePaid'].cumsum()
 
-        print(f"Therefore, the available monthly income is {round(year_cash_posttax/12,2)}. \n\tRemoving the lump sum, we have on average {round((year_cash_posttax - lump_annual_house_payment)/12, 2)} monthly income. \n\tRemoving the property taxes, HOA, and property insurance (total monthly = {round(annual_fees/12, 2)}) \n\tand the avg monthly loan payments ({round(normal_equivalent_monthly_house_payment,2)}), \n\tand the monthly utility costs ({round(utility_costs_monthly,2)}) \n\tand the eat and fun costs monthly (manually set) = {eat_and_fun_monthly} \n\t==========================\n\tour remaining is {monthly_money_after_house_payments} for savings per month. ")
+        payments = -amoritization_df['TotalPaid']
 
-        rental_insurance_monthly = kwargs['rental_insurance_monthly']
+        if self.verbose > 2:
+            print("Amoritization:")
+            print(amoritization_df)
 
-        print("So renting house is like ", (  monthly_rent*12 + rental_insurance_monthly*12 + utility_costs_monthly*12 + eat_and_fun_monthly*12) / 12 )
-        print(f"monthly_rent {monthly_rent} rental_insurance_monthly {rental_insurance_monthly} utility_costs_monthly {utility_costs_monthly} eat_and_fun_monthly {eat_and_fun_monthly}")
-        print("And buying is like: ", (  lump_annual_house_payment + normal_annual_house_payment + annual_fees + utility_costs_monthly*12 + eat_and_fun_monthly*12) / 12 )
-        print(f"lump_monthly_house_payment {lump_annual_house_payment/12} normal_monthly_house_payment {normal_annual_house_payment/12} annual_fees /12 {annual_fees/12} utility_costs_monthly {utility_costs_monthly} eat_and_fun_monthly {eat_and_fun_monthly}")
-        return ( 
-                # If renting
-                year_cash_posttax - monthly_rent*12 - rental_insurance_monthly*12 - utility_costs_monthly*12 - eat_and_fun_monthly*12, 
-                # If buying
-                year_cash_posttax - lump_annual_house_payment - normal_annual_house_payment - annual_fees - utility_costs_monthly*12 - eat_and_fun_monthly*12
-        )
+        return payments
+    
+    @annot(scenario='mortgage')
+    def pmi(self):
+        if not hasattr(self, 'principal_paid'):
+            self.mortgage_payments()
+        
+        pmi_series = pd.Series(data=0, index=self.month_series)
 
-    years_to_investigate = range(kwargs['num_years_investigate'])
-    savings_annually = []
-    savings_buying_house_annually = []
-    for year in years_to_investigate:
-        savings , savings_buying_house = estimate_everything(year, m.monthly_payment())
-        if year == 0:
-            # didn't pay the down payment
-            savings = savings + kwargs['amount_down']
-        savings_annually.append( savings  )
-        savings_buying_house_annually.append( savings_buying_house )
+        pct_principal_paid = self.principal_paid / self.house_cost
+        pmi_series[pct_principal_paid < 0.2] = -self.pmi_monthly
+        pmi_series[pct_principal_paid >= 0.2] = 0.
 
-    def savings_situation(savings):
-        savings_df = pd.DataFrame()
-        savings_df['Year'] = np.array(years_to_investigate) + 1
-        savings_df['Avg Monthly Savings'] = (np.array(savings) / 12).round(2)
-        savings_df['Annual Savings'] = savings
-        # savings_with_interest = np.array(savings).astype(float)
-        savings_df['Savings'] = np.array(savings).cumsum()
-        savings_df = savings_df.set_index('Year')
-        return savings_df
+        return pmi_series
 
-    print("\n\n##################################################")
-    print("Savings if buying a house and selling even")
-    print("##################################################")
-    savings_df = savings_situation(savings_buying_house_annually)
-    sales_price = house_cost
-    agent_sales_cost, docs_stamp_cost, title_ins_cost, total_cost_to_sell = house_sale_fees(sales_price)
-    print(f"Minus the fees of selling the house (Sales cost = {agent_sales_cost} (for agent) + {docs_stamp_cost} (doc stamp) + {title_ins_cost} (title ins) = {total_cost_to_sell}) ")
-    # print(loan_plan[f"PrincipalPaid_Year"])
-    savings_df['MoneyBackFromHouse'] = [ kwargs['amount_down'] + ( sales_price + float( amount_paid_to_principal_for_yearsofinterest[f"PrincipalPaid_Year{year}"] - house_cost ) + total_cost_to_sell ) for year in range(1, kwargs['num_years_investigate']+1) ]
-    savingswithinterest = [float(row['Savings'] * (1.06 if row['MoneyBackFromHouse'] else 1.04 )**(i+1)) for i,(ind,row) in enumerate(savings_df[['Savings','MoneyBackFromHouse']].iterrows())]
-    savings_df['Savings w/I'] = ["{:f}".format(a) for a in savingswithinterest]
+    @annot(scenario='mortgage')
+    def property_fees(self):
+        val  = -self.property_tax_monthly + \
+               -self.hoa_fee_monthly + \
+               -self.home_insurance_monthly
+        return pd.Series(data=val, index=self.month_series)
+    
+    @annot(scenario='mortgage')
+    def house_sales_fees(self):
+        house_price = self.house_cost
+        sales_price = self.assumed_house_sale_cost
+        agent_sales_cost = (self.agent_sales_cost/100.) * house_price
+        docs_stamp_cost = (self.docs_stamp_cost/100.) * sales_price
+        title_ins_cost = (self.title_ins_cost/100.) * sales_price
+        val =  -agent_sales_cost + \
+               -docs_stamp_cost + \
+               -title_ins_cost
+        return val
 
-    savings_df['NetWorth'] = ["{:f}".format(a) for a in (savingswithinterest + savings_df['MoneyBackFromHouse'] )]
-    print(savings_df)
-    savings_df_sellsameprice = savings_df.copy()
+    @annot(scenario='all')
+    def posttax_income(self):
 
-    #money_made_back_on_house = ( sales_price + float( loan_plan[f"PrincipalPaid_Year{NUM_YEARS_INVESTIGATING}"] - house_cost ) )
-    #print(f"Plus a house sold at (say) {sales_price} plus the remaining principal back to bank {loan_plan[f'PrincipalPaid_Year{NUM_YEARS_INVESTIGATING}'] - house_cost} = {money_made_back_on_house}")
-    #total_cash = round( savings_df.iloc[-1]['Savings'] + money_made_back_on_house + total_cost_to_sell , 2)
-    #print(f"Total savings is cash savings ({round(savings_df.iloc[-1]['Savings'],2)}) + house money back ({money_made_back_on_house + total_cost_to_sell}) = {total_cash}. And {total_rsus} total RSUs (have to pay capital gain/loss when sell)")
+        income = pd.Series(data=self.base_salary/12., index=self.month_series)
 
-    # print("\n\n##################################################")
-    # print("Savings if buying a house and selling for a loss")
-    # print("##################################################")
-    # savings_df = savings_situation(savings_buying_house_annually)
-    # sales_price = 0.8 * house_cost
-    # agent_sales_cost, docs_stamp_cost, title_ins_cost, total_cost_to_sell = house_sale_fees(sales_price)
-    # savings_df['MoneyBackFromHouse'] = [ amount_down + ( sales_price + float( loan_plan[f"PrincipalPaid_Year{year}"] - house_cost ) + total_cost_to_sell ) for year in range(1, NUM_YEARS_INVESTIGATING+1) ]
-    # savings_df['NetWorth'] = savings_df['Savings'] + savings_df['MoneyBackFromHouse']
-    # print(savings_df)
+        income.iloc[0] += self.signon_bonus / 2.
+        income.iloc[12-1] += self.signon_bonus / 2.
 
+        annual_rsu_vest = [self.total_rsus/4.]*4
+        cumulative_annual_rsu_vest = np.cumsum(annual_rsu_vest)
+        
+        years = np.unique(self.month_series.year)
 
-    print("\n\n##################################################")
-    print("Savings if not buying a house")
-    print("##################################################")
-    savings_df = savings_situation(savings_annually)
-    savingswithinterest = ["{:f}".format( float(P * (1.06)**(i+1)) ) for i,P in enumerate(savings_df['Savings'])]
-    savings_df['Savings w/I'] = savingswithinterest
-    savings_df['NetWorth'] = savings_df['Savings w/I']
-    print(savings_df)
-    print(f"Total savings is cash savings = {round(float(savings_df.iloc[-1]['Savings w/I']),2)}. And {total_rsus} total RSUs (have to pay capital gain/loss when sell)")
-    print("Also likely doesn't come with parking spot (i.e. $200/mo extra) ")
+        year_idx = 0
+        rsus_series = []
+        rsus_cumulative_series = []
+        for val, cumulative_val in zip( annual_rsu_vest, cumulative_annual_rsu_vest ):
+            for idx in self.month_series[self.month_series.year == years[year_idx]]:
+                if (idx.month==self.start_month_investigate):
+                    rsus_series.append(val)
+                else:
+                    rsus_series.append(0)
+                rsus_cumulative_series.append(cumulative_val)
+            year_idx += 1
+        last_cumulative_val = rsus_cumulative_series[-1]
+        num_months = len(income)
+        for _ in range(num_months-len(rsus_series)):
+            rsus_series.append(0)
+            rsus_cumulative_series.append(last_cumulative_val)
 
-    savings_df_renting = savings_df.copy()
+        rsus_series = pd.Series(data=rsus_series, index=self.month_series)
 
-    net_worth = float(savings_df_sellsameprice['NetWorth'].iloc[-1]) # Net worth at end
-    net_worth = round(net_worth, 2)
-    net_worth_rent = float(savings_df_renting['NetWorth'].iloc[-1])
-    net_worth_rent = round(net_worth_rent, 2)
+        self.rsus_cumulative_series = pd.Series(data=rsus_cumulative_series,
+                                                index=self.month_series)
 
-    target_monthly_savings_earlyon = 2000
-    SumViolatedMonthlyLowEarnings = ( target_monthly_savings_earlyon - savings_df_sellsameprice[savings_df_sellsameprice['Avg Monthly Savings'] < target_monthly_savings_earlyon]['Avg Monthly Savings'] ).sum()
-    SumViolatedMonthlyLowEarnings_rent = ( target_monthly_savings_earlyon - savings_df_renting[savings_df_renting['Avg Monthly Savings'] < target_monthly_savings_earlyon]['Avg Monthly Savings'] ).sum()
+        taxable_income = copy.copy(income)
+        taxable_income += rsus_series
 
-    return net_worth, net_worth_rent, SumViolatedMonthlyLowEarnings, SumViolatedMonthlyLowEarnings_rent
+        # subtracting 401k from income here because it is not taxed until withdrawal
+        # addition used here because method returns negative values (as it is decreasing
+        # the savings balance)
+        taxable_income = taxable_income + self.retirement_401k()["value"]
+
+        if self.verbose > 3:
+            print("Salary & Bonus\n", income.groupby(self.month_series.year).sum())
+            print("RSUs\n", rsus_series.groupby(self.month_series.year).sum())
+            print("Retirement 401k discount\n", self.retirement_401k()["value"].groupby(self.month_series.year).sum())
+
+        def income_tax_calc(untaxed_income):
+            brackets = [
+                (0, 0), # null case
+                (11_000, 0.1),
+                (44_725, 0.12),
+                (95_375, 0.22),
+                (182_100, 0.24),
+                (231_250, 0.32),
+                (578_125, 0.35),
+                (np.inf, 0.37),
+            ]
+            income_tax = 0
+            for i, bracket in enumerate(brackets[1:]):
+                bracket_top_dollars, bracket_tax_rate = bracket
+                previous_bracket_top_dollars, _ = brackets[i]
+                if untaxed_income > previous_bracket_top_dollars:
+                    income_tax += (min(bracket_top_dollars,untaxed_income)-previous_bracket_top_dollars) * bracket_tax_rate
+            return income_tax
+
+        income_tax_series = []
+        for year, taxable_annual_salary in taxable_income.groupby(taxable_income.index.year).sum().items():
+            if self.verbose > 4:
+                print(year, taxable_annual_salary, income_tax_calc(taxable_annual_salary))
+            income_tax_series.append( income_tax_calc(taxable_annual_salary) )
+
+        self.income_tax_series = pd.Series(data=income_tax_series, index=self.month_series.year.unique())
+        
+        # remove income tax payments in April of each year (tax day)
+        for idx, val in income.items():
+            # required because you can start on different month of year so some years are partial
+            num_months_this_year = sum( self.month_series.year == idx.year ) 
+            income.loc[idx] -= ( self.income_tax_series.loc[idx.year] / num_months_this_year)
+
+        return income
+
+    @annot(scenario='all')
+    def retirement_401k(self):
+        val = self.k401 / 12.
+
+        # amount of money invested
+        self.k401_cumulative_series = pd.Series(data=np.cumsum([val]*len(self.month_series)), 
+                                     index=self.month_series)
+        
+        # amount of money coming out of your paycheck (this is smaller because 
+        # part of it is matched by the company)
+        payment = self.k401 - self.k401_company_coverage
+        val = -payment / 12
+        return pd.Series(data=val, index=self.month_series)
+
+    @annot(scenario='all')
+    def retirement_roth(self):
+        val = self.roth / 12.
+        self.roth_cumulative_series = pd.Series(data=np.cumsum([val]*len(self.month_series)), 
+                                     index=self.month_series)
+        val = -val
+        return pd.Series(data=val, index=self.month_series)
+
+    @annot(scenario='all')
+    def food_entertainment(self):
+        val = -self.foodandentertainment_monthly
+        return pd.Series(data=val, index=self.month_series)
+
+    @annot(scenario='rent')
+    def rent(self):
+        val = -self.rent_monthly
+        return pd.Series(data=val, index=self.month_series)
+    
+    @annot(scenario='rent')
+    def renter_insurance(self):
+        val = -self.rental_insurance_monthly
+        return pd.Series(data=val, index=self.month_series)
+
+    def run(self):
+        self.df_mortgage = pd.DataFrame()
+        self.df_rent = pd.DataFrame()
+
+        for attr in dir(self):
+            if attr.startswith('__'):
+                continue
+            if attr == 'run':
+                continue
+            if callable(getattr(self, attr)):
+                res = getattr(self, attr)()
+                if isinstance(res['value'], pd.Series):
+                    if res['scenario'] == 'mortgage':
+                        self.df_mortgage[attr] = res['value']
+                    elif res['scenario'] == 'rent':
+                        self.df_rent[attr] = res['value']
+                    elif res['scenario'] == 'all':
+                        self.df_mortgage[attr] = res['value']
+                        self.df_rent[attr] = res['value']
+
+        if self.verbose > 1:
+            print("Mortgage Scenario:")
+            print(self.df_mortgage.astype(float).round(2))
+
+            print("Rent Scenario:")
+            print(self.df_rent.astype(float).round(2))
+        
+        savings_mortgage = self.df_mortgage.sum(axis=1).cumsum() + self.current_savings
+        savings_rent = self.df_rent.sum(axis=1).cumsum() + self.current_savings
+        investments = self.rsus_cumulative_series + self.current_investments
+        roth_savings = self.roth_cumulative_series + self.current_roth
+        k401_savings = self.k401_cumulative_series + self.current_k401
+
+        def bank_interest(series, savings_interest_rate):
+            savings_plus_interest = [ val * ( 1. + savings_interest_rate )**(i/12) if val > 0 else val
+                for i,(ind,val) in enumerate(
+                        series.items()
+            ) ]
+            savings_plus_interest = pd.Series(data=savings_plus_interest, index=series.index)
+            return savings_plus_interest
+
+        savings_mortgage = bank_interest(savings_mortgage, self.savings_interest_rate)
+        savings_rent = bank_interest(savings_rent, self.savings_interest_rate)
+
+        results_df = pd.DataFrame(index=self.month_series)
+        results_df['savings_mortgage'] = savings_mortgage
+        results_df['house_worth_postsale'] = self.principal_paid + self.house_sales_fees()['value']       # adding because fees already negative
+        results_df['savings_rent'] = savings_rent
+        results_df['investments'] = investments
+        results_df['roth'] = roth_savings
+        results_df['401k'] = k401_savings
+        results_df['net_worth_mortgage'] = savings_mortgage + results_df['house_worth_postsale'] + investments + roth_savings + k401_savings
+        results_df['net_worth_rent'] = savings_rent + investments + roth_savings + k401_savings
+
+        if self.verbose > 2:
+            print("Amount paid in taxes:")
+            print(self.income_tax_series.astype(float).round(2))
+            print("Annual Income post Taxes")
+            print(self.df_mortgage['posttax_income'].astype(float).round(2).groupby(self.df_mortgage.index.year).sum())
+
+        if self.verbose > 0:
+            print("Annual results:")
+            print( results_df.astype(float).round(2).groupby(results_df.index.year).last() )
+
+        results_df = results_df.astype(float).round(2)        
+        summary_dict = results_df[['net_worth_mortgage', 'net_worth_rent']].iloc[-1].to_dict()
+
+        if (savings_mortgage<0).any():
+            summary_dict['net_worth_mortgage'] = np.nan #'Went Broke (cash-wise)!'
+            warnings.warn("Went broke during mortgage!")
+
+        if (savings_rent<0).any():
+            summary_dict['net_worth_rent'] = np.nan #'Went Broke (cash-wise)!'
+            warnings.warn("Went broke during renting!")
+
+        # pd.options.display.float_format = '{:,}'.format
+        return summary_dict, results_df
+
+def estimate(kwargs):
+    return Estimator(kwargs).run()
