@@ -8,6 +8,11 @@ import os
 import sys
 from eval import estimate, YoureBrokeException
 
+import matplotlib
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set_style("whitegrid")
+
 argparse.ArgumentParser(description='Mortgage calculator')
 parser = argparse.ArgumentParser()
 parser.add_argument('--cfg', type=str, default='settings_optimize.yml', help='yaml configuration file')
@@ -81,24 +86,38 @@ if 'base_settings' in settings:
 
     @blockPrinting
     def execute(**kwargs):
-        summary_dict, results_df = estimate(kwargs)
-        return summary_dict
+        return estimate(kwargs)
     
-    results = []
+    net_worths = []
+    timeseries_dfs = []
     for kwargs in grid_kwargs:
         iter_settings = copy.deepcopy(base_settings)
         for k,v in kwargs.items():
             iter_settings[k] = v
-        results.append(
-            execute(**iter_settings)
-        )
-    results_df = pd.DataFrame(results)
+        nw, results_df = execute(**iter_settings)
+        net_worths.append(nw)
+        timeseries_dfs.append(results_df)
+    net_worths_df = pd.DataFrame(net_worths)
 
-    print( pd.concat([param_df, results_df], axis=1)
-                .sort_values(by='net_worth_mortgage', ascending=False) 
-        )
+    res = pd.concat([param_df, net_worths_df], axis=1) \
+                .sort_values(by='net_worth_mortgage', ascending=False)
+
+    print( res.head(25) )
     print("Note: `NaN` values indicate that your cash savings balance "
           "had < $0 at some point in time.")
+
+    results_df = timeseries_dfs[ res.index[0] ]
+
+    fig, ax = plt.subplots(1,1, figsize=(10,5))
+    ax.plot(results_df.index, results_df['net_worth_mortgage'], label='With mortgage')
+    ax.plot(results_df.index, results_df['net_worth_rent'], label='With rent')
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Net worth ($)')
+    ax.legend()
+    ax.get_yaxis().set_major_formatter(
+        matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
+    ax.grid('--')
+    plt.show()
 
 else:
     summary_dict, results_df = estimate(settings)
@@ -106,3 +125,20 @@ else:
     print("\nMonthly results:")
     print(results_df)
 
+    fig, ax = plt.subplots(1,1, figsize=(10,5))
+    ax.plot(results_df.index, results_df['net_worth_mortgage'], label='With mortgage')
+    ax.plot(results_df.index, results_df['net_worth_rent'], label='With rent')
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Net worth ($)')
+    ax.legend()
+    ax.get_yaxis().set_major_formatter(
+        matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
+    plt.show()
+
+    fig, ax = plt.subplots(1,1, figsize=(10,5))
+    results_df[['savings_mortgage','house_profit','savings_rent','investments','roth','401k']].plot(ax=ax)
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Dollars ($)')
+    ax.get_yaxis().set_major_formatter(
+        matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
+    plt.show()

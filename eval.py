@@ -126,13 +126,43 @@ class Estimator:
             setattr(self, k, v)
 
         now = datetime.datetime.now()
-        now = now.replace(month=self.start_month_investigate)
+        now = now.replace(year=int(self.start_year_investigate), 
+                          month=int(self.start_month_investigate))
+        
+        buy_house_date = copy.copy(now)
+        self.buy_house_date = buy_house_date.replace(year=int(self.housePurchase_year_investigate), 
+                                                     month=int(self.housePurchase_month_investigate) )
+
         end = copy.copy(now)
         end = end.replace(year=now.year + self.num_years_investigate)
+
         self.month_series = pd.date_range(now.strftime('%Y-%m'), 
                                           end.strftime('%Y-%m'), 
                                           freq='1M').strftime('%Y-%m')
         self.month_series = pd.to_datetime(self.month_series)
+
+        mortgage_month_mask = (self.month_series.year == self.buy_house_date.year) & \
+                             (self.month_series.month == self.buy_house_date.month)
+
+        if sum( mortgage_month_mask ) == 0:
+            raise Exception("House buy date is not within inspection range. "
+                            "`start_year_investigate` and `start_month_investigate` must indicate "
+                           f"a date between {self.month_series[0]} and {self.month_series[-1]}")
+        
+        mortgage_month_idx = np.where(mortgage_month_mask)[0][0]
+
+        self.pre_mortgage_month_series = self.month_series[:mortgage_month_idx]
+        self.mortgage_month_series = self.month_series[mortgage_month_idx:]
+
+
+    @annot(scenario='mortgage')
+    def pre_mortgage_rent_and_rental_insurance(self):
+        # if you are delaying when you start to buy a house
+        # this functionality allows us to calculate when may be the 
+        # most opportune time to buy a house (mostly centered around
+        # when you will have the appropriate down payment)
+        return pd.Series(data= -(self.prehouse_rent_monthly + self.rental_insurance_monthly), 
+                         index=self.pre_mortgage_month_series)
 
     @annot(scenario='mortgage')
     def mortgage_payments(self):
@@ -153,17 +183,16 @@ class Estimator:
 
         payments = list(m.monthly_payment_schedule(extra_principle_payments))
 
-        if len(payments) < len(self.month_series):
-            payments.extend([[0,0,0]]*(len(self.month_series)-len(payments)))
-            extra_principle_payments.extend([0]*(len(self.month_series)-len(payments)))
+        if len(payments) < len(self.mortgage_month_series):
+            payments.extend([[0,0,0]]*(len(self.mortgage_month_series)-len(payments)))
+            extra_principle_payments.extend([0]*(len(self.mortgage_month_series)-len(payments)))
         else:
-            payments = payments[:len(self.month_series)]
-            extra_principle_payments = extra_principle_payments[:len(self.month_series)]
+            payments = payments[:len(self.mortgage_month_series)]
+            extra_principle_payments = extra_principle_payments[:len(self.mortgage_month_series)]
         
         amoritization_df = pd.DataFrame(payments, 
                                         columns=['Principal', 'Interest', 'ExtraPrinciple'],
-                                        index=self.month_series).astype(float)
-        
+                                        index=self.mortgage_month_series).astype(float)
 
         # correct so dont pay extra on last month
         amoritization_df['ExtraPrinciple'].iloc[-1] = 0.
@@ -180,15 +209,17 @@ class Estimator:
             print("Amoritization:")
             print(amoritization_df)
 
-        return payments
+        payments_series = pd.Series(data=0, index=self.month_series)
+        payments_series.loc[self.mortgage_month_series] = payments
+
+        return payments_series
     
     @annot(scenario='mortgage')
     def pmi(self):
         if not hasattr(self, 'principal_paid'):
             self.mortgage_payments()
         
-        pmi_series = pd.Series(data=0, index=self.month_series)
-
+        pmi_series = pd.Series(data=0, index=self.mortgage_month_series)
         pct_principal_paid = self.principal_paid / self.house_cost
         pmi_series[pct_principal_paid < 0.2] = -self.pmi_monthly
         pmi_series[pct_principal_paid >= 0.2] = 0.
@@ -200,19 +231,36 @@ class Estimator:
         val  = -self.property_tax_monthly + \
                -self.hoa_fee_monthly + \
                -self.home_insurance_monthly
-        return pd.Series(data=val, index=self.month_series)
+        return pd.Series(data=val, index=self.mortgage_month_series)
     
     @annot(scenario='mortgage')
-    def house_sales_fees(self):
+    def house_sale_profit(self):
         house_price = self.house_cost
-        sales_price = self.assumed_house_sale_cost
-        agent_sales_cost = (self.agent_sales_cost/100.) * house_price
-        docs_stamp_cost = (self.docs_stamp_cost/100.) * sales_price
-        title_ins_cost = (self.title_ins_cost/100.) * sales_price
-        val =  -agent_sales_cost + \
-               -docs_stamp_cost + \
-               -title_ins_cost
-        return val
+        sales_price = house_price
+
+        vals = []
+        for month in self.month_series:
+            if month in self.mortgage_month_series:
+                sales_price = sales_price * (1 + self.house_appreciation_annual_rate/12.)
+                agent_sales_cost = (self.agent_sales_cost/100.) * house_price
+                docs_stamp_cost = (self.docs_stamp_cost/100.) * sales_price
+                title_ins_cost = (self.title_ins_cost/100.) * sales_price
+                vals.append(sales_price - house_price - agent_sales_cost - docs_stamp_cost - title_ins_cost)
+            elif month < self.mortgage_month_series[0]:
+                vals.append(0)
+            elif month > self.mortgage_month_series[-1]:
+                vals.append(vals[-1])
+
+        house_profit = pd.Series(data=vals, index=self.month_series)
+
+        # embedding result in dictionary because the `run` code expects a Series
+        # for each cost method that is cumulative, but this one should only be conducted once
+        # (when selling the house)
+        return {'profit': house_profit}
+
+    @annot(scenario='mortgage')
+    def renting_out_place(self):
+        return pd.Series(data=self.mortgage_renting_income_monthly, index=self.mortgage_month_series)
 
     @annot(scenario='all')
     def posttax_income(self):
@@ -248,6 +296,12 @@ class Estimator:
 
         self.rsus_cumulative_series = pd.Series(data=rsus_cumulative_series,
                                                 index=self.month_series)
+        self.rsus_cumulative_series = pd.Series(
+            data=[ val * ( 1. + self.annual_investment_appreciation )**(i/12) if val > 0 else val
+                for i,(ind,val) in enumerate(
+                        self.rsus_cumulative_series.items()
+            ) ], 
+            index=self.month_series)
 
         taxable_income = copy.copy(income)
         taxable_income += rsus_series
@@ -296,7 +350,7 @@ class Estimator:
             income.loc[idx] -= ( self.income_tax_series.loc[idx.year] / num_months_this_year)
 
         return income
-
+    
     @annot(scenario='all')
     def retirement_401k(self):
         val = self.k401 / 12.
@@ -304,6 +358,12 @@ class Estimator:
         # amount of money invested
         self.k401_cumulative_series = pd.Series(data=np.cumsum([val]*len(self.month_series)), 
                                      index=self.month_series)
+        self.k401_cumulative_series = pd.Series(
+            data=[ val * ( 1. + self.annual_investment_appreciation )**(i/12) if val > 0 else val
+                for i,(ind,val) in enumerate(
+                        self.k401_cumulative_series.items()
+            ) ], 
+            index=self.month_series)
         
         # amount of money coming out of your paycheck (this is smaller because 
         # part of it is matched by the company)
@@ -316,6 +376,13 @@ class Estimator:
         val = self.roth / 12.
         self.roth_cumulative_series = pd.Series(data=np.cumsum([val]*len(self.month_series)), 
                                      index=self.month_series)
+        self.roth_cumulative_series = pd.Series(
+            data=[ val * ( 1. + self.annual_investment_appreciation )**(i/12) if val > 0 else val
+                for i,(ind,val) in enumerate(
+                        self.roth_cumulative_series.items()
+            ) ], 
+            index=self.month_series)
+
         val = -val
         return pd.Series(data=val, index=self.month_series)
 
@@ -347,7 +414,13 @@ class Estimator:
                 res = getattr(self, attr)()
                 if isinstance(res['value'], pd.Series):
                     if res['scenario'] == 'mortgage':
-                        self.df_mortgage[attr] = res['value']
+                        if res['value'].index.equals(self.month_series):
+                            self.df_mortgage[attr] = res['value']
+                        elif res['value'].index.equals(self.pre_mortgage_month_series) or \
+                             res['value'].index.equals(self.mortgage_month_series) :
+                            series = pd.Series(data=0, index=self.month_series)
+                            series.loc[res['value'].index] = res['value']
+                            self.df_mortgage[attr] = series
                     elif res['scenario'] == 'rent':
                         self.df_rent[attr] = res['value']
                     elif res['scenario'] == 'all':
@@ -380,12 +453,12 @@ class Estimator:
 
         results_df = pd.DataFrame(index=self.month_series)
         results_df['savings_mortgage'] = savings_mortgage
-        results_df['house_worth_postsale'] = self.principal_paid + self.house_sales_fees()['value']       # adding because fees already negative
+        results_df['house_profit'] = self.house_sale_profit()['value']['profit']
         results_df['savings_rent'] = savings_rent
         results_df['investments'] = investments
         results_df['roth'] = roth_savings
         results_df['401k'] = k401_savings
-        results_df['net_worth_mortgage'] = savings_mortgage + results_df['house_worth_postsale'] + investments + roth_savings + k401_savings
+        results_df['net_worth_mortgage'] = savings_mortgage + results_df['house_profit'] + investments + roth_savings + k401_savings
         results_df['net_worth_rent'] = savings_rent + investments + roth_savings + k401_savings
 
         if self.verbose > 2:
@@ -409,8 +482,8 @@ class Estimator:
             summary_dict['net_worth_rent'] = np.nan #'Went Broke (cash-wise)!'
             warnings.warn("Went broke during renting!")
 
-        # pd.options.display.float_format = '{:,}'.format
         return summary_dict, results_df
+
 
 def estimate(kwargs):
     return Estimator(kwargs).run()

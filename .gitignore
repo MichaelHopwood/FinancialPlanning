@@ -1,3 +1,9 @@
+# do not track some personal settings files
+settings_mrh.yml
+settings_mwh.yml
+settings_optimize_mrh.yml
+settings_optimize_mwh.yml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

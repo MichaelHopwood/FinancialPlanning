@@ -6,14 +6,25 @@ base_settings : settings.yml
 # 1. specify dict with keys: {min, max, num}
 # 2. specify list of values
 
-onetime_extra_payment:
-  0:
-    min: 0
-    max: 100_000
-    num: 2
-  12:
-    min: 0
-    max: 100_000
-    num: 2
+# onetime_extra_payment:
+#   0:
+#     min: 0
+#     max: 100_000
+#     num: 2
+#   12:
+#     min: 0
+#     max: 100_000
+#     num: 2
+
+amount_down:
+  min: 40_000
+  max: 100_000
+  num: 7
 
 loan_duration: [10, 15, 20, 30]
+
+# housePurchase_year_investigate: [2024, 2025, 2026, 2027, 2028]
+# housePurchase_month_investigate: [3, 6, 9, 12]
+
+housePurchase_year_investigate: [2024,2025,2026,2027,2028]
+housePurchase_month_investigate: [3,6,9,12]

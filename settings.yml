@@ -1,5 +1,13 @@
 num_years_investigate: 20
+
 start_month_investigate: 7         # If want to start investigation not in January
+start_year_investigate: 2023
+
+prehouse_rent_monthly: 2500                # rent cost per month , put 0 here if you are couch-surfing
+                                           # until you buy the house!
+housePurchase_month_investigate: 7
+housePurchase_year_investigate: 2023
+
 verbose: 1
 
 
@@ -7,8 +15,8 @@ verbose: 1
 ### Current net-worth settings
 ##############################
 # These are tracked to help compute your net worth
-current_savings: 0           # current savings in bank account
-current_investments: 0            # current investments in brokerage account
+current_savings: 0          # current savings in bank account
+current_investments: 0       # current investments in brokerage account
 current_k401: 0                   # current 401k balance
 current_roth: 0                   # current roth balance
 
@@ -21,7 +29,7 @@ base_salary : 150_000
 signon_bonus : 100_000
 total_rsus : 250_000               # uses 25% investing schedule per year over 4 years
 
-
+annual_investment_appreciation: 0.07    # average investment appreciation
 
 ##############################
 ### Housing settings
@@ -36,10 +44,8 @@ rental_insurance_monthly: 17      # rental insurance per month
 ###############
 ## Option 2: Mortgage
 ###############
-house_cost: 400_000                # property value bought at
-## assumed house sale cost (for simulation purposes) for when
-## or if you sell the property
-assumed_house_sale_cost: 400_000
+house_cost: 400_000                   # property value bought at
+house_appreciation_annual_rate: 0.04  # house appreciation rate per year
 
 amount_down: 20_000                # amount down for loan
 loan_duration: 15                 # loan duration in years
@@ -67,6 +73,9 @@ monthly_extra_payment:
   # month : amount paid every month starting on that month until next setting
   0: 0
 
+# extra money made renting out the house or a spare room (e.g. airbnb, etc.)
+mortgage_renting_income_monthly: 0
+
 ## utilities costs
 utilities_monthly: 300            # e.g. water, electricity, gas, internet, etc.
 
@@ -92,7 +101,7 @@ foodandentertainment_monthly: 1000  # adapt this to your lifestyle
 k401:  22_500                           # intended 401k contribution per year
 k401_company_coverage: 11_250                # company match for 401k
 
-roth: 5500                              # intended roth contribution per year
+roth: 6500                              # intended roth contribution per year
 
 
 
