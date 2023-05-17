@@ -67,6 +67,10 @@ These numbers are visualized below (plots conducted inside `mortgage.py`):
 <img src="imgs/net_worth_components_plot.png" alt="Net components worth plot" title="Net components worth plot">
 
 
+**Note:** if you are curious about the estimations from more specific components of the savings_mortgage or savings_rent (etc.), more resolute termainal printouts are available if you increase the `verbose` parameter in your `settings.yml` file.
+
+***
+
 
 ## 3. Run a grid search across a financial scenario
 
