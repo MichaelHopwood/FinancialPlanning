@@ -57,12 +57,14 @@ Monthly results:
 
 where 
 
-$$net\_worth\_mortgage = savings\_mortgage + house\_profit + investments + roth + 401k$$
+`net_worth_mortgage = savings_mortgage + house_profit + investments + roth + 401k`
 
-$$net\_worth\_rent = savings\_rent + investments + roth + 401k$$
+`net_worth_rent = savings_rent + investments + roth + 401k`
 
-<img src="imgs/net_worth_plot.png" alt="Net worth plot" width="75%" height="75%" title="Net worth plot">
-<img src="imgs/net_worth_components_plot.png" alt="Net components worth plot" width="75%" height="75%" title="Net components worth plot">
+These numbers are visualized below (plots conducted inside `mortgage.py`):
+
+<img src="imgs/net_worth_plot.png" alt="Net worth plot" title="Net worth plot">
+<img src="imgs/net_worth_components_plot.png" alt="Net components worth plot" title="Net components worth plot">
 
 
 
