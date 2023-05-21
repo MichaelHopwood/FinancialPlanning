@@ -116,9 +116,6 @@ def annot(scenario='all'):
     return decorator
 
 
-class YoureBrokeException(Exception): pass
-
-
 class Estimator:
 
     def __init__(self, settings):
@@ -346,8 +343,10 @@ class Estimator:
         # remove income tax payments in April of each year (tax day)
         for idx, val in income.items():
             # required because you can start on different month of year so some years are partial
-            num_months_this_year = sum( self.month_series.year == idx.year ) 
-            income.loc[idx] -= ( self.income_tax_series.loc[idx.year] / num_months_this_year)
+            # num_months_this_year = sum( self.month_series.year == idx.year ) 
+            incomes_this_year = income[income.index.year == idx.year]
+            pct_income_this_year = val / sum(incomes_this_year)
+            income.loc[idx] -= ( self.income_tax_series.loc[idx.year] * pct_income_this_year)
 
         return income
     
@@ -470,6 +469,9 @@ class Estimator:
         if self.verbose > 0:
             print("Annual results:")
             print( results_df.astype(float).round(2).groupby(results_df.index.year).last() )
+            print()
+            print('Monthly results:')
+            print(results_df.astype(float).round(2))
 
         results_df = results_df.astype(float).round(2)        
         summary_dict = results_df[['net_worth_mortgage', 'net_worth_rent']].iloc[-1].to_dict()
