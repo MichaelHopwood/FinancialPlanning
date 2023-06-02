@@ -432,10 +432,18 @@ class Estimator:
 
             print("Rent Scenario:")
             print(self.df_rent.astype(float).round(2))
+
+        
+        investment_growth = pd.Series(
+            data=[ self.current_investments * ( 1. + self.annual_investment_appreciation )**(i/12)
+                for i,_ in enumerate(
+                        self.month_series
+            ) ], 
+            index=self.month_series)
         
         savings_mortgage = self.df_mortgage.sum(axis=1).cumsum() + self.current_savings
         savings_rent = self.df_rent.sum(axis=1).cumsum() + self.current_savings
-        investments = self.rsus_cumulative_series + self.current_investments
+        investments = self.rsus_cumulative_series + investment_growth
         roth_savings = self.roth_cumulative_series + self.current_roth
         k401_savings = self.k401_cumulative_series + self.current_k401
 
