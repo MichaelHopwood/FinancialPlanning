@@ -5,8 +5,8 @@ start_year_investigate: 2023
 
 prehouse_rent_monthly: 2500                # rent cost per month , put 0 here if you are couch-surfing
                                            # until you buy the house!
-housePurchase_month_investigate: 7
-housePurchase_year_investigate: 2023
+housePurchase_month_investigate: 1
+housePurchase_year_investigate: 2025
 
 verbose: 1
 
@@ -15,8 +15,8 @@ verbose: 1
 ### Current net-worth settings
 ##############################
 # These are tracked to help compute your net worth
-current_savings: 0          # current savings in bank account
-current_investments: 0       # current investments in brokerage account
+current_savings: 100_000          # current savings in bank account
+current_investments: 100_000       # current investments in brokerage account
 current_k401: 0                   # current 401k balance
 current_roth: 0                   # current roth balance
 
@@ -25,9 +25,9 @@ current_roth: 0                   # current roth balance
 ##############################
 ### Salary settings
 ##############################
-base_salary : 150_000
-signon_bonus : 100_000
-total_rsus : 250_000               # uses 25% investing schedule per year over 4 years
+base_salary : 100_000
+signon_bonus : 0
+total_rsus : 0               # uses 25% investing schedule per year over 4 years
 
 annual_investment_appreciation: 0.07    # average investment appreciation
 
@@ -44,7 +44,7 @@ rental_insurance_monthly: 17      # rental insurance per month
 ###############
 ## Option 2: Mortgage
 ###############
-house_cost: 400_000                   # property value bought at
+house_cost: 300_000                   # property value bought at
 house_appreciation_annual_rate: 0.04  # house appreciation rate per year
 
 amount_down: 20_000                # amount down for loan
