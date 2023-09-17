@@ -291,16 +291,10 @@ class Estimator:
 
         rsus_series = pd.Series(data=rsus_series, index=self.month_series)
 
-        self.rsus_cumulative_series = pd.Series(data=rsus_cumulative_series,
-                                                index=self.month_series)
-        self.rsus_cumulative_series = pd.Series(
-            data=[ val * ( 1. + self.annual_investment_appreciation )**(i/12) if val > 0 else val
-                for i,(ind,val) in enumerate(
-                        self.rsus_cumulative_series.items()
-            ) ], 
-            index=self.month_series)
+        # self.rsus_cumulative_series = pd.Series(data=rsus_cumulative_series,
+        #                                         index=self.month_series)
 
-        taxable_income = copy.copy(income)
+        taxable_income = copy.copy(income)        
         taxable_income += rsus_series
 
         # subtracting 401k from income here because it is not taxed until withdrawal
@@ -339,14 +333,28 @@ class Estimator:
             income_tax_series.append( income_tax_calc(taxable_annual_salary) )
 
         self.income_tax_series = pd.Series(data=income_tax_series, index=self.month_series.year.unique())
-        
+
         # remove income tax payments in April of each year (tax day)
-        for idx, val in income.items():
+        for (idx, val),(_,rsu_val) in zip(income.items(), rsus_series.items()):
             # required because you can start on different month of year so some years are partial
             # num_months_this_year = sum( self.month_series.year == idx.year ) 
             incomes_this_year = income[income.index.year == idx.year]
             pct_income_this_year = val / sum(incomes_this_year)
-            income.loc[idx] -= ( self.income_tax_series.loc[idx.year] * pct_income_this_year)
+            pct_liquid_income_this_year = (val / (rsu_val + val)) * pct_income_this_year
+            pct_rsus_income_this_year = (rsu_val / (rsu_val + val)) * pct_income_this_year
+            tax_this_year_on_liquid = ( self.income_tax_series.loc[idx.year] * pct_liquid_income_this_year)
+            income.loc[idx] -= tax_this_year_on_liquid
+            tax_this_year_on_rsus = ( self.income_tax_series.loc[idx.year] * pct_rsus_income_this_year)
+            rsus_series.loc[idx] -= tax_this_year_on_rsus
+
+        self.rsus_cumulative_series = rsus_series.cumsum()
+
+        self.rsus_cumulative_series = pd.Series(
+            data=[ val * ( 1. + self.annual_investment_appreciation )**(i/12) if val > 0 else val
+                for i,(ind,val) in enumerate(
+                        self.rsus_cumulative_series.items()
+            ) ], 
+            index=self.month_series)
 
         return income
     
